@@ -82,16 +82,24 @@ __attribute__((section(".data"))) TIME time_timer_set;
 
 // this is a timer which should never expire, only there to serve as a guard
 __attribute__((section(".data"))) struct sched_timer timer_last = {
-  FALSE,	//inuse
-  FALSE,	//event
-  FALSE, 	//disable_tfunc
-  0,		//priority
-  0,		//first_time_period_expired
-  VERY_LONG_TIME,	//sticky_time_to_wait
-  VERY_LONG_TIME, 	//regular_time_period
-  VERY_LONG_TIME, 	//first_time_period
-  VERY_LONG_TIME, 	//time_to_wait
-  0					//tfunc
+	FALSE,	//inuse
+	FALSE,	//event
+	FALSE, 	//disable_tfunc
+	0,		//priority
+
+	{
+		{ 0,		//first_time_period_expired
+			VERY_LONG_TIME,	//sticky_time_to_wait
+			VERY_LONG_TIME, 	//regular_time_period
+			VERY_LONG_TIME, 	//first_time_period
+			VERY_LONG_TIME, 	//time_to_wait
+			0					//tfunc
+		}
+	},
+
+	0,	//current_mode
+	1, //max_mode
+
 };
 
 
@@ -179,7 +187,7 @@ void uapp_sched_timer_undeclare(struct sched_timer *t){
 		if (timer_next) {
 			//debug_log_tsc((u32)timer_next->time_to_wait,
 			//		uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_PHYSTIMERPROGRAM_UNDECLARE);
-			uapp_sched_start_physical_timer(timer_next->time_to_wait);
+			uapp_sched_start_physical_timer(timer_next->modes[timer_next->current_mode].time_to_wait);
 			time_timer_set = uapp_sched_read_cpucounter();
 		}
 	}
@@ -196,29 +204,32 @@ struct sched_timer *uapp_sched_timer_instantiate(struct sched_timer *t, u32 firs
 	// initialize the timer struct
 	t->event = FALSE;
 	t->disable_tfunc = FALSE;
-	t->first_time_period = first_time_period;
-	t->regular_time_period = regular_time_period;
 	t->priority = priority;
-	t->tfunc = func;
-	t->first_time_period_expired = 0;
-	t->time_to_wait = first_time_period;
-	t->sticky_time_to_wait = regular_time_period;
+	t->current_mode = 0;
+	t->max_mode=1;
+
+	t->modes[t->current_mode].first_time_period = first_time_period;
+	t->modes[t->current_mode].regular_time_period = regular_time_period;
+	t->modes[t->current_mode].tfunc = func;
+	t->modes[t->current_mode].first_time_period_expired = 0;
+	t->modes[t->current_mode].time_to_wait = first_time_period;
+	t->modes[t->current_mode].sticky_time_to_wait = regular_time_period;
 
 	if (!timer_next) {
 		// no timers set at all, so this is shortest
 		time_timer_set = uapp_sched_read_cpucounter();
 		//debug_log_tsc((u32)(timer_next = t)->time_to_wait,
 		//		uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_PHYSTIMERPROGRAM_INSTANTIATESHORTEST);
-		uapp_sched_start_physical_timer((timer_next = t)->time_to_wait);
+		uapp_sched_start_physical_timer((timer_next = t)->modes[t->current_mode].time_to_wait);
 
-	} else if ((first_time_period + uapp_sched_read_cpucounter()) < (timer_next->time_to_wait + time_timer_set)) {
+	} else if ((first_time_period + uapp_sched_read_cpucounter()) < (timer_next->modes[timer_next->current_mode].time_to_wait + time_timer_set)) {
 		// new timer is shorter than current one, so update all timers and set
 		// this timer as the physical timer
 		uapp_sched_timers_update(uapp_sched_read_cpucounter() - time_timer_set);
 		time_timer_set = uapp_sched_read_cpucounter();
 		//debug_log_tsc((u32)(timer_next = t)->time_to_wait,
 		//		uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_PHYSTIMERPROGRAM_INSTANTIATESHORTER);
-		uapp_sched_start_physical_timer((timer_next = t)->time_to_wait);
+		uapp_sched_start_physical_timer((timer_next = t)->modes[t->current_mode].time_to_wait);
 
 	} else {
 		// new timer is longer, than current one, do nothing now
@@ -283,9 +294,9 @@ void uapp_sched_timers_update(TIME time){
 
 	for (t=sched_timers;t<&sched_timers[MAX_TIMERS];t++) {
 		if (t->inuse) {
-		  if (time < t->time_to_wait) { // unexpired
-			t->time_to_wait -= time;
-			if (t->time_to_wait < timer_next->time_to_wait){
+		  if (time < t->modes[t->current_mode].time_to_wait) { // unexpired
+			t->modes[t->current_mode].time_to_wait -= time;
+			if (t->modes[t->current_mode].time_to_wait < timer_next->modes[timer_next->current_mode].time_to_wait){
 			  timer_next = t;
 			}
 
@@ -430,7 +441,7 @@ void uapp_sched_process_timers(u32 cpuid){
 	for(i=0; i < MAX_TIMERS; i++){
 		if(sched_timers[i].event){
 			sched_timers[i].event = FALSE;
-			if(sched_timers[i].tfunc && !sched_timers[i].disable_tfunc){
+			if(sched_timers[i].modes[sched_timers[i].current_mode].tfunc && !sched_timers[i].disable_tfunc){
 				priority_queue_insert((void *)&sched_timers[i], sched_timers[i].priority);
 			}
 
@@ -440,9 +451,9 @@ void uapp_sched_process_timers(u32 cpuid){
 			  hyptask_handle_list[sched_timers[i].hyptask_handle].num_periods ++;
 			}
 
-			time_to_wait = sched_timers[i].regular_time_period; //reload
+			time_to_wait = sched_timers[i].modes[sched_timers[i].current_mode].regular_time_period; //reload
 			priority = sched_timers[i].priority;
-			uapp_sched_timer_redeclare(&sched_timers[i], time_to_wait, time_to_wait, priority, sched_timers[i].tfunc);
+			uapp_sched_timer_redeclare(&sched_timers[i], time_to_wait, time_to_wait, priority, sched_timers[i].modes[sched_timers[i].current_mode].tfunc);
 		}
 	}
 }
@@ -477,8 +488,8 @@ void uapp_sched_run_hyptasks(void){
 		//interrupts enable
 		enable_fiq();
 
-		if(task_timer->tfunc)
-			task_timer->tfunc(task_timer);
+		if(task_timer->modes[task_timer->current_mode].tfunc)
+			task_timer->modes[task_timer->current_mode].tfunc(task_timer);
 
 		//interrupts disable
 		disable_fiq();
@@ -516,7 +527,7 @@ void uapp_sched_timerhandler(void){
 		time_timer_set = uapp_sched_read_cpucounter();
 		//debug_log_tsc((u32)timer_next->time_to_wait,
 		//		uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_PHYSTIMERPROGRAM_TIMERHANDLER);
-		uapp_sched_start_physical_timer(timer_next->time_to_wait);
+		uapp_sched_start_physical_timer(timer_next->modes[timer_next->current_mode].time_to_wait);
 	}
 
 	if (fiq_timer_handler_timerevent_triggered == 0){
@@ -643,7 +654,7 @@ void hyptask2(struct sched_timer *t){
 void hyptask3(struct sched_timer *t){
   debug_log_tsc(3, uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_HYPTASKEXEC_BEFORE);
 	/* //busy(10); */
-  //uart_puts("hyptaskid=3 executed");
+  uart_puts("hyptaskid=3 executed");
   debug_log_tsc(3, uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_HYPTASKEXEC_AFTER);
 }
 
@@ -715,8 +726,6 @@ void uapp_hypmtscheduler_handlehcall_createhyptask(ugapp_hypmtscheduler_param_t 
 		return;
 	}
 
-	//ok now populate the hyptask_id within the hyptask handle
-	hyptask_handle_list[i].hyptask_id = hyptask_id;
 
 	// record creation timestampt before programming the timer
 	// we are pulling back the clock by 1000 ticks : debugging
@@ -735,7 +744,12 @@ void uapp_hypmtscheduler_handlehcall_createhyptask(ugapp_hypmtscheduler_param_t 
 		return;
 	}
 
-	hyptask_handle_list[i].t->hyptask_handle = i;
+
+	//ok now populate the hyptask_id within the hyptask handle
+	hyptask_handle_list[i].hyptask_id[hyptask_handle_list[i].t->current_mode] = hyptask_id;
+
+
+	hyptask_handle_list[i].t->hyptask_handle = i; //couple timer with hyptask handle list index
 
 	/*
 	hyptask_handle_list[i].guest_task_creation_timestamp = uapp_sched_read_cpucounter();
@@ -771,7 +785,7 @@ void uapp_hypmtscheduler_handlehcall_disablehyptask(ugapp_hypmtscheduler_param_t
 		return;
 	}
 
-	debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id, uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_DISABLEHYPTASK_BEFORE);
+	debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id[hyptask_handle_list[hyptask_handle].t->current_mode], uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_DISABLEHYPTASK_BEFORE);
 
 	hyptask_handle_list[hyptask_handle].guest_job_end_timestamp = uapp_sched_read_cpucounter();
 
@@ -786,15 +800,15 @@ void uapp_hypmtscheduler_handlehcall_disablehyptask(ugapp_hypmtscheduler_param_t
 	     &&
 	     (
 	      (hyptask_handle_list[hyptask_handle].guest_job_end_timestamp <= hyptask_handle_list[hyptask_handle].guest_task_creation_timestamp +
-	       hyptask_handle_list[hyptask_handle].t->first_time_period)
+	       hyptask_handle_list[hyptask_handle].t->modes[hyptask_handle_list[hyptask_handle].t->current_mode].first_time_period)
 	      ||
 	      (
 	       hyptask_handle_list[hyptask_handle].guest_job_end_timestamp >=  hyptask_handle_list[hyptask_handle].guest_task_creation_timestamp +
-	       (hyptask_handle_list[hyptask_handle].t->regular_time_period * hyptask_handle_list[hyptask_handle].num_periods)
+	       (hyptask_handle_list[hyptask_handle].t->modes[hyptask_handle_list[hyptask_handle].t->current_mode].regular_time_period * hyptask_handle_list[hyptask_handle].num_periods)
 	       &&
 		hyptask_handle_list[hyptask_handle].guest_job_end_timestamp <=  hyptask_handle_list[hyptask_handle].guest_task_creation_timestamp +
-		(hyptask_handle_list[hyptask_handle].t->regular_time_period * hyptask_handle_list[hyptask_handle].num_periods) +
-		hyptask_handle_list[hyptask_handle].t->first_time_period
+		(hyptask_handle_list[hyptask_handle].t->modes[hyptask_handle_list[hyptask_handle].t->current_mode].regular_time_period * hyptask_handle_list[hyptask_handle].num_periods) +
+		hyptask_handle_list[hyptask_handle].t->modes[hyptask_handle_list[hyptask_handle].t->current_mode].first_time_period
 	      )
 	      )
 	     )
@@ -817,13 +831,13 @@ void uapp_hypmtscheduler_handlehcall_disablehyptask(ugapp_hypmtscheduler_param_t
 	// hyptask_timer->disable_tfunc = TRUE;
 
 	if (!(hyptask_handle_list[hyptask_handle].valid_guest_mask & GUEST_JOB_START_VALID_MASK)){
-	  debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id, uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_DISABLEHYPTASK_INVALID_START);
-	  debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id, uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_INVALID_START_NUM_PERIOD_OFFSET+hyptask_handle_list[hyptask_handle].num_periods);
+	  debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id[hyptask_handle_list[hyptask_handle].t->current_mode], uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_DISABLEHYPTASK_INVALID_START);
+	  debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id[hyptask_handle_list[hyptask_handle].t->current_mode], uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_INVALID_START_NUM_PERIOD_OFFSET+hyptask_handle_list[hyptask_handle].num_periods);
 	}
 	
 	hmtsp->status=1; //success
 
-	debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id, uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_DISABLEHYPTASK_AFTER);
+	debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id[hyptask_handle_list[hyptask_handle].t->current_mode], uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_DISABLEHYPTASK_AFTER);
 }
 
 
@@ -850,22 +864,22 @@ void uapp_hypmtscheduler_handlehcall_guestjobstart(ugapp_hypmtscheduler_param_t 
 		return;
 	}
 
-	debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id, uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_STARTGUESTJOB_BEFORE);
+	debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id[hyptask_handle_list[hyptask_handle].t->current_mode], uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_STARTGUESTJOB_BEFORE);
 
 	now = uapp_sched_read_cpucounter();
 	
 	if (
 	       (hyptask_handle_list[hyptask_handle].guest_job_start_timestamp == 0 &&
-	          now <= hyptask_handle_list[hyptask_handle].guest_task_creation_timestamp + hyptask_handle_list[hyptask_handle].t->first_time_period
+	          now <= hyptask_handle_list[hyptask_handle].guest_task_creation_timestamp + hyptask_handle_list[hyptask_handle].t->modes[hyptask_handle_list[hyptask_handle].t->current_mode].first_time_period
 	       ) ||
 	       (hyptask_handle_list[hyptask_handle].guest_job_start_timestamp <= hyptask_handle_list[hyptask_handle].last_enforcement_timestamp
 		&&
 		now >=  hyptask_handle_list[hyptask_handle].guest_task_creation_timestamp +
-		(hyptask_handle_list[hyptask_handle].t->regular_time_period * hyptask_handle_list[hyptask_handle].num_periods)
+		(hyptask_handle_list[hyptask_handle].t->modes[hyptask_handle_list[hyptask_handle].t->current_mode].regular_time_period * hyptask_handle_list[hyptask_handle].num_periods)
 		&&
 		now <=  hyptask_handle_list[hyptask_handle].guest_task_creation_timestamp +
-		(hyptask_handle_list[hyptask_handle].t->regular_time_period * hyptask_handle_list[hyptask_handle].num_periods) +
-		hyptask_handle_list[hyptask_handle].t->first_time_period
+		(hyptask_handle_list[hyptask_handle].t->modes[hyptask_handle_list[hyptask_handle].t->current_mode].regular_time_period * hyptask_handle_list[hyptask_handle].num_periods) +
+		hyptask_handle_list[hyptask_handle].t->modes[hyptask_handle_list[hyptask_handle].t->current_mode].first_time_period
 		)
 	    )
 	  {
@@ -879,7 +893,7 @@ void uapp_hypmtscheduler_handlehcall_guestjobstart(ugapp_hypmtscheduler_param_t 
 	
 	hmtsp->status=1; //success
 
-	debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id, uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_STARTGUESTJOB_AFTER);
+	debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id[hyptask_handle_list[hyptask_handle].t->current_mode], uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_STARTGUESTJOB_AFTER);
 }
 
 
@@ -903,7 +917,7 @@ void uapp_hypmtscheduler_handlehcall_deletehyptask(ugapp_hypmtscheduler_param_t 
 		return;
 	}
 
-	hyptask_id = hyptask_handle_list[hyptask_handle].hyptask_id;
+	hyptask_id = hyptask_handle_list[hyptask_handle].hyptask_id[hyptask_handle_list[hyptask_handle].t->current_mode];
 
 	debug_log_tsc(hyptask_id, uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_DELETEHYPTASK_BEFORE);
 
@@ -915,7 +929,6 @@ void uapp_hypmtscheduler_handlehcall_deletehyptask(ugapp_hypmtscheduler_param_t 
 
 	//reset handle for future use
 	hyptask_handle_list[hyptask_handle].inuse = FALSE;
-	hyptask_handle_list[hyptask_handle].hyptask_id = 0;
 	hyptask_handle_list[hyptask_handle].t = NULL;
 
 	hmtsp->status=1; //success

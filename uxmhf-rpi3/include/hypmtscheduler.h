@@ -67,6 +67,8 @@
 #define FALSE 	0
 
 #define MAX_TIMERS	4	//number of timers
+#define MAX_TIMER_MODES	4	//maximum number of modes for a timer
+
 typedef uint64_t TIME;   	//our time type; 64-bits since we are using clock cycles
 #define VERY_LONG_TIME  0xffffffffffffffffULL	//longest time possible
 
@@ -79,18 +81,29 @@ struct sched_timer;
 
 typedef void (*HYPTHREADFUNC)(struct sched_timer *);
 
-struct sched_timer {
-	uint32_t inuse;			// TRUE if in use
-	uint32_t event;    		// set to TRUE at timeout
-	uint32_t disable_tfunc;	// set to TRUE if tfunc should not be invoked
-	int priority;		// priority associated with the timer
+struct sched_timer_mode {
+
 	int first_time_period_expired;	//1 if first_time_period has expired, 0 otherwise
 	TIME sticky_time_to_wait;  // relative time to wait sticky
 	TIME regular_time_period;	//the regular time period of this timer
 	TIME first_time_period; //the first time period of this timer
 	TIME time_to_wait;  // relative time to wait
 	HYPTHREADFUNC tfunc;	//the hypthread function associated with the timer
-        uint32_t hyptask_handle;
+
+};
+
+struct sched_timer {
+	uint32_t inuse;			// TRUE if in use
+	uint32_t event;    		// set to TRUE at timeout
+	uint32_t disable_tfunc;	// set to TRUE if tfunc should not be invoked
+	int priority;		// priority associated with the timer
+
+	struct sched_timer_mode modes[MAX_TIMER_MODES];	//timer modes with associated function callbacks
+    uint32_t current_mode; //this is the index into modes, specifying the current mode of the timer
+    uint32_t max_mode; //this is maximum index into modes, always >=1 && <= MAX_TIMER_MODES
+
+
+	uint32_t hyptask_handle;	//this is the index into the hyptask handle table
 };
 
 typedef struct {
@@ -110,14 +123,21 @@ typedef struct {
 
 typedef struct {
 	uint32_t inuse;
-	uint32_t hyptask_id;
-	struct sched_timer *t;
-        u64 guest_task_creation_timestamp;
-        u64 guest_job_start_timestamp;
-        u64 guest_job_end_timestamp;
-        u64 last_enforcement_timestamp;
-        uint8_t valid_guest_mask;
-        u64 num_periods; // we increment in E timer so needs to be compensated
+							
+	u64 guest_task_creation_timestamp;
+	u64 guest_job_start_timestamp;
+	u64 guest_job_end_timestamp;
+	u64 last_enforcement_timestamp;
+	uint8_t valid_guest_mask;
+	u64 num_periods; // we increment in E timer so needs to be compensated
+
+	struct sched_timer *t;	//this is the sched_timer structure associated with this hyptask
+
+	uint32_t hyptask_id[MAX_TIMER_MODES];	//this is the index into the hyptask_idlist table which is 
+											//basically the function to execute for the hyptask
+											//this is an array, one per each mode of the associated sched_timer
+
+
 }hypmtscheduler_hyptask_handle_t;
 
 typedef struct {
