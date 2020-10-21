@@ -488,6 +488,22 @@ void uapp_sched_process_timers(u32 cpuid){
 }
 
 
+
+
+//////
+// switch the mode of the hyptask 
+// input is the sched_timer struct of the hyptask from which all information
+// can be obtained
+// currently just returns the current mode, i.e., no switch
+// this mimics the vanilla mixed-trust scheduler with no modes
+//////
+uint32_t uapp_sched_mode_switch(struct sched_timer *task_timer){
+
+	return task_timer->current_mode;
+
+}
+
+
 //////
 // process priority queue and run hyptasks associated with the timers
 // hyptasks are run with interrupts enabled so we can continue to process
@@ -514,6 +530,15 @@ void uapp_sched_run_hyptasks(void){
 			break;
 		task_timer = (struct sched_timer *)queue_data;
 
+        //////
+		//check if modeswitch_flag indicates to call mode_switch at the start of the hyptask 
+		if (task_timer->modes[task_timer->current_mode].modeswitch_flag == HYPMTSCHEDULER_HYPTASK_MODESWITCH_FLAG_BEGINNING){
+			task_timer->current_mode = uapp_sched_mode_switch(task_timer);
+			//NB: the following logic will run the hyptask associated with the new mode in case of a 
+			//mode-switch	
+		}
+
+
 		//interrupts enable
 		enable_fiq();
 
@@ -522,6 +547,15 @@ void uapp_sched_run_hyptasks(void){
 
 		//interrupts disable
 		disable_fiq();
+
+
+        //////  
+		//check if modeswitch_flag indicates to call mode_switch at the end of the hyptask 
+		if (task_timer->modes[task_timer->current_mode].modeswitch_flag == HYPMTSCHEDULER_HYPTASK_MODESWITCH_FLAG_END){
+			task_timer->current_mode = uapp_sched_mode_switch(task_timer);
+		}
+
+
 	}
 }
 
