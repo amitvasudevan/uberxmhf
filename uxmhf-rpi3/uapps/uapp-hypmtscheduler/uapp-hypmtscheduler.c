@@ -892,6 +892,7 @@ void uapp_hypmtscheduler_handlehcall_guestjobstart(ugapp_hypmtscheduler_param_t 
 	hyptask_handle_list[hyptask_handle].guest_job_start_timestamp = now;
 	
 	hmtsp->status=1; //success
+	hmtsp->oparam_1=hyptask_handle_list[hyptask_handle].t->current_mode; //return current mode
 
 	debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id[hyptask_handle_list[hyptask_handle].t->current_mode], uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_STARTGUESTJOB_AFTER);
 }

@@ -68,6 +68,8 @@ extern bool hypmtscheduler_getrawtick64(u64 *tickcount);
 extern bool hypmtscheduler_dumpdebuglog(u8 *dst_log_buffer, u32 *num_entries);
 extern u32 sysreg_read_cntfrq(void);
 extern u64 sysreg_read_cntvct(void);
+extern bool hypmtscheduler_guestjobstart_returnmode(u32 hyptask_handle, u32 *mode);
+extern bool hypmtscheduler_guestjobstart(u32 hyptask_handle);
 
 
 //prototypes for character driver interaction
