@@ -764,6 +764,43 @@ void uapp_hypmtscheduler_handlehcall_createhyptask(ugapp_hypmtscheduler_param_t 
 }
 
 
+
+//////
+// hyptask addmode API
+// adds a mode to a given hyptask
+//////
+void uapp_hypmtscheduler_handlehcall_hyptaskaddmode(ugapp_hypmtscheduler_param_t *hmtsp){
+	uint32_t hyptask_handle = hmtsp->iparam_1;
+	uint32_t hyptask_first_period = hmtsp->iparam_2;
+	uint32_t hyptask_regular_period = hmtsp->iparam_3;
+	uint32_t hyptask_id = hmtsp->iparam_4;
+	uint32_t hyptask_modeswitch_flag = hmtsp->iparam_5;
+	uint32_t hyptask_modeid = hmtsp->iparam_6;
+	
+	uint32_t i;
+
+	//check if provided hyptask handle is within limits
+	if(hyptask_handle >= HYPMTSCHEDULER_MAX_HYPTASKS){
+		hmtsp->status=0; //fail
+		return;
+	}
+
+	//check if provided hyptask handle is in use
+	if(!hyptask_handle_list[hyptask_handle].inuse){
+		hmtsp->status=0; //fail
+		return;
+	}
+
+	debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id[hyptask_handle_list[hyptask_handle].t->current_mode], uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_HYPTASKADDMODE_BEFORE);
+
+
+	
+	debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id[hyptask_handle_list[hyptask_handle].t->current_mode], uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_HYPTASKADDMODE_AFTER);
+	hmtsp->status=1;	//success
+}
+
+
+
 //////
 // disable hyptask API
 //////
@@ -994,6 +1031,9 @@ bool uapp_hypmtscheduler_handlehcall(u32 uhcall_function, void *uhcall_buffer,
 #ifndef __ENABLE_UAPP_HYPMTSCHEDULER_SECURE_HYPTASK_BOOTSTRAP__
 		uapp_hypmtscheduler_handlehcall_createhyptask(hmtsp);
 #endif
+
+	}else if(hmtsp->uhcall_fn == UAPP_HYPMTSCHEDULER_UHCALL_HYPTASKADDMODE){
+		uapp_hypmtscheduler_handlehcall_hyptaskaddmode(hmtsp);
 
 	}else if(hmtsp->uhcall_fn == UAPP_HYPMTSCHEDULER_UHCALL_DISABLEHYPTASK){
 		uapp_hypmtscheduler_handlehcall_disablehyptask(hmtsp);
