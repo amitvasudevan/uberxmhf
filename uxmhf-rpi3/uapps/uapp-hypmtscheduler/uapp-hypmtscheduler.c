@@ -163,6 +163,7 @@ void uapp_sched_timers_init(void){
   for(i=0; i < MAX_TIMERS; i++){
 	sched_timers[i].inuse = FALSE;
 	sched_timers[i].hyptask_handle = -1;
+	sched_timers[i].previous_mode = 0; //we always default to mode 0; mixed-trust scheduler
 	sched_timers[i].current_mode = 0; //we always default to mode 0; mixed-trust scheduler
 	for(j=0; j < MAX_TIMER_MODES; j++){
 		sched_timers[i].modes[j].valid=false;
@@ -449,8 +450,6 @@ void uapp_sched_stop_physical_timer(void){
 //////
 void uapp_sched_process_timers(u32 cpuid){
 	u32 i;
-	u32 time_to_wait;
-	int priority;
 
 	for(i=0; i < MAX_TIMERS; i++){
 		if(sched_timers[i].event){
@@ -465,12 +464,25 @@ void uapp_sched_process_timers(u32 cpuid){
 			  hyptask_handle_list[sched_timers[i].hyptask_handle].num_periods ++;
 			}
 
-			//TBD: logic to check if current_mode first_timer_expired is true or false and
-			//load appropriately; set mode 0 first_timer_expired to true since we will fire it
-			//on declare
-			time_to_wait = sched_timers[i].modes[sched_timers[i].current_mode].regular_time_period; //reload
-			priority = sched_timers[i].priority;
-			uapp_sched_timer_redeclare(&sched_timers[i], time_to_wait, time_to_wait, priority, sched_timers[i].modes[sched_timers[i].current_mode].tfunc);
+			//we reprogram this timer in the following way:
+			//if current_mode == previous_mode then just reprogram with regular_time_period of current_mode
+			//else reprogram with first_time_period of current_mode and set previous_mode to current_mode
+			//so subsequent reprograms will use regular_time_period
+			if(sched_timers[i].current_mode == sched_timers[i].previous_mode){
+				uapp_sched_timer_redeclare(&sched_timers[i], 
+					sched_timers[i].modes[sched_timers[i].current_mode].regular_time_period, 
+					sched_timers[i].modes[sched_timers[i].current_mode].regular_time_period, 
+					sched_timers[i].priority, 
+					sched_timers[i].modes[sched_timers[i].current_mode].tfunc);
+			}else{
+				sched_timers[i].previous_mode = sched_timers[i].current_mode;
+				uapp_sched_timer_redeclare(&sched_timers[i], 
+					sched_timers[i].modes[sched_timers[i].current_mode].first_time_period, 
+					sched_timers[i].modes[sched_timers[i].current_mode].regular_time_period, 
+					sched_timers[i].priority, 
+					sched_timers[i].modes[sched_timers[i].current_mode].tfunc);
+			}
+
 		}
 	}
 }

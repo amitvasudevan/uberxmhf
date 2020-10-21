@@ -107,7 +107,11 @@ struct sched_timer {
 
 	struct sched_timer_mode modes[MAX_TIMER_MODES];	//timer modes with associated function callbacks
     uint32_t current_mode; //this is the index into modes, specifying the current mode of the timer
-
+	uint32_t previous_mode; //this is the index into modes, specifying the previous mode of the timer trigger
+							//this is used to figure out if we need to load first time period or regular time
+							//period if a mode switch happened, is current_mode=previous_mode then always load
+							//regular timer in process timers, else load first time period and then set
+							//previous_mode to current_mode
 	uint32_t hyptask_handle;	//this is the index into the hyptask handle table
 };
 
