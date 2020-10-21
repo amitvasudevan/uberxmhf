@@ -88,8 +88,7 @@ __attribute__((section(".data"))) struct sched_timer timer_last = {
 	0,		//priority
 
 	{
-		{ 0,		//first_time_period_expired
-			VERY_LONG_TIME,	//sticky_time_to_wait
+		{ 	VERY_LONG_TIME,	//sticky_time_to_wait
 			VERY_LONG_TIME, 	//regular_time_period
 			VERY_LONG_TIME, 	//first_time_period
 			VERY_LONG_TIME, 	//time_to_wait
@@ -164,6 +163,7 @@ void uapp_sched_timers_init(void){
   for(i=0; i < MAX_TIMERS; i++){
 	sched_timers[i].inuse = FALSE;
 	sched_timers[i].hyptask_handle = -1;
+	sched_timers[i].current_mode = 0; //we always default to mode 0; mixed-trust scheduler
 	for(j=0; j < MAX_TIMER_MODES; j++){
 		sched_timers[i].modes[j].valid=false;
 	}
@@ -217,12 +217,12 @@ struct sched_timer *uapp_sched_timer_instantiate(struct sched_timer *t, u32 firs
 
 	t->disable_tfunc = FALSE;
 	t->priority = priority;
-	t->current_mode = 0;
+	//t->current_mode = 0;
 
 	t->modes[t->current_mode].first_time_period = first_time_period;
 	t->modes[t->current_mode].regular_time_period = regular_time_period;
 	t->modes[t->current_mode].tfunc = func;
-	t->modes[t->current_mode].first_time_period_expired = 0; //TBD: set to true since it will expire first
+	//t->modes[t->current_mode].first_time_period_expired = 0; //TBD: set to true since it will expire first
 	t->modes[t->current_mode].time_to_wait = first_time_period;
 	t->modes[t->current_mode].sticky_time_to_wait = regular_time_period;
 	t->modes[t->current_mode].valid = true;
@@ -836,7 +836,6 @@ void uapp_hypmtscheduler_handlehcall_hyptaskaddmode(ugapp_hypmtscheduler_param_t
 	hyptask_handle_list[hyptask_handle].t->modes[hyptask_modeid].first_time_period = hyptask_first_period;
 	hyptask_handle_list[hyptask_handle].t->modes[hyptask_modeid].regular_time_period = hyptask_regular_period;
 	hyptask_handle_list[hyptask_handle].t->modes[hyptask_modeid].tfunc = hyptask_idlist[hyptask_id];
-	hyptask_handle_list[hyptask_handle].t->modes[hyptask_modeid].first_time_period_expired = 0;
 	hyptask_handle_list[hyptask_handle].t->modes[hyptask_modeid].time_to_wait = hyptask_first_period;
 	hyptask_handle_list[hyptask_handle].t->modes[hyptask_modeid].sticky_time_to_wait = hyptask_regular_period;
 	hyptask_handle_list[hyptask_handle].t->modes[hyptask_modeid].valid = true;
