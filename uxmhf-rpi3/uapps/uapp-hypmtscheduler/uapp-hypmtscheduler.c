@@ -152,18 +152,23 @@ hypmtscheduler_secure_bootstrap_config_t hyptask_secure_bootstrap_config[] = {
 // software timer implementation
 //////////////////////////////////////////////////////////////////////////////
 
-
 //////
 // initialize timers struct
 // run_context = interrupts disabled
 //////
 void uapp_sched_timers_init(void){
   u32 i;
+  u32 j;
+
 
   for(i=0; i < MAX_TIMERS; i++){
-	  sched_timers[i].inuse = FALSE;
-	  sched_timers[i].hyptask_handle = -1;
+	sched_timers[i].inuse = FALSE;
+	sched_timers[i].hyptask_handle = -1;
+	for(j=0; j < MAX_TIMER_MODES; j++){
+		sched_timers[i].modes[j].valid=false;
+	}
   }
+
 }
 
 
@@ -210,11 +215,6 @@ struct sched_timer *uapp_sched_timer_instantiate(struct sched_timer *t, u32 firs
 	// initialize the timer struct
 	t->event = FALSE;
 
-	//make all modes invalid to start with
-	for(i=0; i < MAX_TIMER_MODES; i++){
-		t->modes[i].valid=false;
-	}
-
 	t->disable_tfunc = FALSE;
 	t->priority = priority;
 	t->current_mode = 0;
@@ -222,7 +222,7 @@ struct sched_timer *uapp_sched_timer_instantiate(struct sched_timer *t, u32 firs
 	t->modes[t->current_mode].first_time_period = first_time_period;
 	t->modes[t->current_mode].regular_time_period = regular_time_period;
 	t->modes[t->current_mode].tfunc = func;
-	t->modes[t->current_mode].first_time_period_expired = 0;
+	t->modes[t->current_mode].first_time_period_expired = 0; //TBD: set to true since it will expire first
 	t->modes[t->current_mode].time_to_wait = first_time_period;
 	t->modes[t->current_mode].sticky_time_to_wait = regular_time_period;
 	t->modes[t->current_mode].valid = true;
@@ -465,6 +465,9 @@ void uapp_sched_process_timers(u32 cpuid){
 			  hyptask_handle_list[sched_timers[i].hyptask_handle].num_periods ++;
 			}
 
+			//TBD: logic to check if current_mode first_timer_expired is true or false and
+			//load appropriately; set mode 0 first_timer_expired to true since we will fire it
+			//on declare
 			time_to_wait = sched_timers[i].modes[sched_timers[i].current_mode].regular_time_period; //reload
 			priority = sched_timers[i].priority;
 			uapp_sched_timer_redeclare(&sched_timers[i], time_to_wait, time_to_wait, priority, sched_timers[i].modes[sched_timers[i].current_mode].tfunc);
@@ -1218,6 +1221,7 @@ void uapp_sched_initialize(u32 cpuid){
 	u32 queue_data;
 	int status;
 	volatile u32 sp, spnew;
+	uint32_t i, j;
 
 
 	if(cpuid == 0){
@@ -1244,6 +1248,9 @@ void uapp_sched_initialize(u32 cpuid){
 
 		_XDPRINTFSMP_("%s[%u]: Current CPU counter=0x%016llx\n", __func__, cpuid,
 				uapp_sched_read_cpucounter());
+
+		// initialize sched_timer structure
+		uapp_sched_timers_init();
 
 		//zero-initialize hyptask_handle_list
 		memset(&hyptask_handle_list, 0, sizeof(hyptask_handle_list));
