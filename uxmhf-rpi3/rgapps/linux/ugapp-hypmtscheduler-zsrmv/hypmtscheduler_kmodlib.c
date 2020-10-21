@@ -133,6 +133,45 @@ bool hypmtscheduler_createhyptask(u32 first_period, u32 regular_period,
 }
 
 
+bool hypmtscheduler_hyptaskaddmode(u32 hyptask_handle, 
+			u32 first_period, u32 regular_period,
+			u32 hyptask_id, u32 hyptask_modeswitch_flag, u32 hyptask_modeid){
+
+	ugapp_hypmtscheduler_param_t *hmtsp;
+	struct page *hmtsp_page;
+	u32 hmtsp_paddr;
+
+	hmtsp_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+
+	if(!hmtsp_page){
+		return false;
+	}
+
+	hmtsp = (ugapp_hypmtscheduler_param_t *)page_address(hmtsp_page);
+
+	hmtsp->uhcall_fn = UAPP_HYPMTSCHEDULER_UHCALL_HYPTASKADDMODE;
+    hmtsp->iparam_1 = hyptask_handle;	
+    hmtsp->iparam_2 = first_period;	
+    hmtsp->iparam_3 = regular_period;	
+    hmtsp->iparam_4 = hyptask_id;						
+    hmtsp->iparam_5 = hyptask_modeswitch_flag;						
+    hmtsp->iparam_6 = hyptask_modeid;						
+
+	hmtsp_paddr = page_to_phys(hmtsp_page);
+	__hvc(UAPP_HYPMTSCHEDULER_UHCALL, hmtsp_paddr, sizeof(ugapp_hypmtscheduler_param_t));
+
+	if(!hmtsp->status){
+		__free_page(hmtsp_page);
+		return false;
+	}
+
+	__free_page(hmtsp_page);
+	return true;
+}
+
+
+
+
 bool hypmtscheduler_disablehyptask(u32 hyptask_handle){
 
 	ugapp_hypmtscheduler_param_t *hmtsp;

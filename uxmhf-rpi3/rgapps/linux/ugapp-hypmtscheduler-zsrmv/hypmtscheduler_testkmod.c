@@ -70,6 +70,9 @@ extern u32 sysreg_read_cntfrq(void);
 extern u64 sysreg_read_cntvct(void);
 extern bool hypmtscheduler_guestjobstart_returnmode(u32 hyptask_handle, u32 *mode);
 extern bool hypmtscheduler_guestjobstart(u32 hyptask_handle);
+extern bool hypmtscheduler_hyptaskaddmode(u32 hyptask_handle, 
+			u32 first_period, u32 regular_period,
+			u32 hyptask_id, u32 hyptask_modeswitch_flag, u32 hyptask_modeid);
 
 
 //prototypes for character driver interaction
