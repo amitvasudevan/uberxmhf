@@ -226,6 +226,8 @@ struct sched_timer *uapp_sched_timer_instantiate(struct sched_timer *t, u32 firs
 	t->modes[t->current_mode].time_to_wait = first_time_period;
 	t->modes[t->current_mode].sticky_time_to_wait = regular_time_period;
 	t->modes[t->current_mode].valid = true;
+	t->modes[t->current_mode].modeswitch_flag = HYPMTSCHEDULER_HYPTASK_MODESWITCH_FLAG_END;
+
 
 	if (!timer_next) {
 		// no timers set at all, so this is shortest
@@ -803,8 +805,39 @@ void uapp_hypmtscheduler_handlehcall_hyptaskaddmode(ugapp_hypmtscheduler_param_t
 		return;
 	}
 
+	//check if provided hyptask_modeid is within the supported range
+	if(hyptask_modeid >= MAX_TIMER_MODES){
+		hmtsp->status=0; //fail
+		return;
+	}
+
+	//check if provided hyptask_modeswitch_flag is within the supported range
+	if(hyptask_modeswitch_flag != HYPMTSCHEDULER_HYPTASK_MODESWITCH_FLAG_BEGINNING
+		&& hyptask_modeswitch_flag != HYPMTSCHEDULER_HYPTASK_MODESWITCH_FLAG_END){
+		hmtsp->status=0; //fail
+		return;
+	}
+
+	//now check if the given hyptask_id is valid
+	if(hyptask_id > (HYPMTSCHEDULER_MAX_HYPTASKID-1) ){
+		hmtsp->status=0; //fail
+		return;
+	}
+
 	debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id[hyptask_handle_list[hyptask_handle].t->current_mode], uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_HYPTASKADDMODE_BEFORE);
 
+	//populate the hyptask_id for the given hyptask_modeid
+	hyptask_handle_list[hyptask_handle].hyptask_id[hyptask_modeid] = hyptask_id;
+	
+	//populate the sched_timer_mode fields
+	hyptask_handle_list[hyptask_handle].t->modes[hyptask_modeid].first_time_period = hyptask_first_period;
+	hyptask_handle_list[hyptask_handle].t->modes[hyptask_modeid].regular_time_period = hyptask_regular_period;
+	hyptask_handle_list[hyptask_handle].t->modes[hyptask_modeid].tfunc = hyptask_idlist[hyptask_id];
+	hyptask_handle_list[hyptask_handle].t->modes[hyptask_modeid].first_time_period_expired = 0;
+	hyptask_handle_list[hyptask_handle].t->modes[hyptask_modeid].time_to_wait = hyptask_first_period;
+	hyptask_handle_list[hyptask_handle].t->modes[hyptask_modeid].sticky_time_to_wait = hyptask_regular_period;
+	hyptask_handle_list[hyptask_handle].t->modes[hyptask_modeid].valid = true;
+	hyptask_handle_list[hyptask_handle].t->modes[hyptask_modeid].modeswitch_flag = hyptask_modeswitch_flag;
 
 	
 	debug_log_tsc(hyptask_handle_list[hyptask_handle].hyptask_id[hyptask_handle_list[hyptask_handle].t->current_mode], uapp_sched_read_cpucounter(), DEBUG_LOG_EVTTYPE_HYPTASKADDMODE_AFTER);

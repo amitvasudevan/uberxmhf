@@ -19,6 +19,8 @@
 #define UAPP_HYPMTSCHEDULER_UHCALL_GUESTJOBSTART        8
 #define UAPP_HYPMTSCHEDULER_UHCALL_HYPTASKADDMODE	9
 
+#define HYPMTSCHEDULER_HYPTASK_MODESWITCH_FLAG_BEGINNING	10
+#define HYPMTSCHEDULER_HYPTASK_MODESWITCH_FLAG_END			20
 
 #define HYPMTSCHEDULER_MAX_HYPTASKID	4
 #define HYPMTSCHEDULER_MAX_HYPTASKS	4
@@ -95,7 +97,7 @@ struct sched_timer_mode {
 	TIME time_to_wait;  // relative time to wait
 	HYPTHREADFUNC tfunc;	//the hypthread function associated with the timer
 	bool valid; 	//true if this mode entry is valid; if false then this mode entry is not in use
-
+	uint32_t modeswitch_flag; //can be one of HYPMTSCHEDULER_HYPTASK_MODESWITCH_FLAG_BEGINNING or HYPMTSCHEDULER_HYPTASK_MODESWITCH_FLAG_END
 };
 
 struct sched_timer {
