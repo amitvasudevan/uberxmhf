@@ -98,7 +98,6 @@ __attribute__((section(".data"))) struct sched_timer timer_last = {
 	},
 
 	0,	//current_mode
-	1, //max_mode
 
 };
 
@@ -173,13 +172,19 @@ void uapp_sched_timers_init(void){
 // run_ccontext =
 //////
 void uapp_sched_timer_undeclare(struct sched_timer *t){
+	uint32_t i;
 
 	if (!t->inuse) {
 		return;
 	}
 
+	//make all modes invalid
+	for(i=0; i < MAX_TIMER_MODES; i++){
+		t->modes[i].valid=false;
+	}
 	t->inuse = FALSE;
 	t->hyptask_handle = -1;
+
 
 	// check if we were waiting on this one
 	if (t == timer_next) {
@@ -200,13 +205,19 @@ void uapp_sched_timer_undeclare(struct sched_timer *t){
 //////
 struct sched_timer *uapp_sched_timer_instantiate(struct sched_timer *t, u32 first_time_period,
 		u32 regular_time_period, int priority, HYPTHREADFUNC func){
+	uint32_t i;
 
 	// initialize the timer struct
 	t->event = FALSE;
+
+	//make all modes invalid to start with
+	for(i=0; i < MAX_TIMER_MODES; i++){
+		t->modes[i].valid=false;
+	}
+
 	t->disable_tfunc = FALSE;
 	t->priority = priority;
 	t->current_mode = 0;
-	t->max_mode=1;
 
 	t->modes[t->current_mode].first_time_period = first_time_period;
 	t->modes[t->current_mode].regular_time_period = regular_time_period;
@@ -214,6 +225,7 @@ struct sched_timer *uapp_sched_timer_instantiate(struct sched_timer *t, u32 firs
 	t->modes[t->current_mode].first_time_period_expired = 0;
 	t->modes[t->current_mode].time_to_wait = first_time_period;
 	t->modes[t->current_mode].sticky_time_to_wait = regular_time_period;
+	t->modes[t->current_mode].valid = true;
 
 	if (!timer_next) {
 		// no timers set at all, so this is shortest

@@ -94,6 +94,7 @@ struct sched_timer_mode {
 	TIME first_time_period; //the first time period of this timer
 	TIME time_to_wait;  // relative time to wait
 	HYPTHREADFUNC tfunc;	//the hypthread function associated with the timer
+	bool valid; 	//true if this mode entry is valid; if false then this mode entry is not in use
 
 };
 
@@ -105,8 +106,6 @@ struct sched_timer {
 
 	struct sched_timer_mode modes[MAX_TIMER_MODES];	//timer modes with associated function callbacks
     uint32_t current_mode; //this is the index into modes, specifying the current mode of the timer
-    uint32_t max_mode; //this is maximum index into modes, always >=1 && <= MAX_TIMER_MODES
-
 
 	uint32_t hyptask_handle;	//this is the index into the hyptask handle table
 };
